@@ -1,0 +1,263 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LobbyStatus {
+  WAITING
+  RUNNING
+  CLOSED
+}
+
+enum LobbyVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum ParticipantState {
+  JOINED
+  LEFT
+  KICKED
+}
+
+enum Currency {
+  TON
+  STARS
+}
+
+enum MatchStatus {
+  WAITING_COMMIT
+  WAITING_REVEAL
+  RESOLVED
+  CANCELED
+}
+
+enum Move {
+  ROCK
+  PAPER
+  SCISSORS
+}
+
+enum MatchResult {
+  PENDING
+  PLAYER1_WIN
+  PLAYER2_WIN
+  DRAW
+  CANCELED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  LOCK_STAKE
+  REFUND_STAKE
+  PAYOUT
+  FEE
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+enum PaymentProvider {
+  TON
+  STARS
+}
+
+enum PaymentStatus {
+  CREATED
+  CONFIRMED
+  FAILED
+  EXPIRED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  telegramId   BigInt   @unique
+  username     String?
+  firstName    String?
+  lastName     String?
+  photoUrl     String?
+  languageCode String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions         Session[]
+  lobbyMemberships LobbyParticipant[]
+  createdLobbies   Lobby[]              @relation("LobbyHost")
+  matchPlayers     MatchPlayer[]
+  balances         UserBalance[]
+  transactions     BalanceTransaction[]
+  paymentRequests  PaymentRequest[]
+
+  @@index([createdAt])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenId   String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Lobby {
+  id         String          @id @default(cuid())
+  publicId   String          @unique
+  hostUserId String
+  status     LobbyStatus     @default(WAITING)
+  visibility LobbyVisibility @default(PUBLIC)
+  currency   Currency
+  stakeMinor BigInt
+  minPlayers Int             @default(2)
+  maxPlayers Int             @default(2)
+  autoStart  Boolean         @default(true)
+  joinCode   String?         @unique
+  metadata   Json?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  closedAt   DateTime?
+
+  host         User               @relation("LobbyHost", fields: [hostUserId], references: [id], onDelete: Restrict)
+  participants LobbyParticipant[]
+  matches      Match[]
+
+  @@index([status, visibility, currency, stakeMinor])
+  @@index([hostUserId])
+}
+
+model LobbyParticipant {
+  id       String           @id @default(cuid())
+  lobbyId  String
+  userId   String
+  seatNo   Int
+  state    ParticipantState @default(JOINED)
+  joinedAt DateTime         @default(now())
+  leftAt   DateTime?
+
+  lobby Lobby @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([lobbyId, userId])
+  @@unique([lobbyId, seatNo])
+  @@index([lobbyId, state])
+  @@index([userId, state])
+}
+
+model Match {
+  id               String      @id @default(cuid())
+  lobbyId          String
+  status           MatchStatus @default(WAITING_COMMIT)
+  result           MatchResult @default(PENDING)
+  currency         Currency
+  stakeMinor       BigInt
+  potMinor         BigInt
+  rakeMinor        BigInt      @default(0)
+  winnerUserId     String?
+  resolutionReason String?
+  commitDeadline   DateTime
+  revealDeadline   DateTime?
+  startedAt        DateTime
+  resolvedAt       DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  lobby   Lobby         @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  players MatchPlayer[]
+
+  @@index([lobbyId, status])
+  @@index([status, commitDeadline])
+  @@index([status, revealDeadline])
+}
+
+model MatchPlayer {
+  id            String    @id @default(cuid())
+  matchId       String
+  userId        String
+  position      Int
+  commitHash    String?
+  committedAt   DateTime?
+  revealMove    Move?
+  revealSalt    String?
+  revealedAt    DateTime?
+  forfeitReason String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@unique([matchId, position])
+  @@index([matchId])
+}
+
+model UserBalance {
+  id             String   @id @default(cuid())
+  userId         String
+  currency       Currency
+  availableMinor BigInt   @default(0)
+  lockedMinor    BigInt   @default(0)
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, currency])
+  @@index([currency])
+}
+
+model BalanceTransaction {
+  id             String            @id @default(cuid())
+  userId         String
+  currency       Currency
+  type           TransactionType
+  status         TransactionStatus @default(COMPLETED)
+  amountMinor    BigInt
+  balanceBefore  BigInt
+  balanceAfter   BigInt
+  lockedBefore   BigInt
+  lockedAfter    BigInt
+  referenceType  String?
+  referenceId    String?
+  idempotencyKey String?           @unique
+  metadata       Json?
+  createdAt      DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model PaymentRequest {
+  id                String          @id @default(cuid())
+  userId            String
+  provider          PaymentProvider
+  currency          Currency
+  amountMinor       BigInt
+  status            PaymentStatus   @default(CREATED)
+  externalRequestId String?
+  externalTxHash    String?
+  idempotencyKey    String?         @unique
+  metadata          Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  confirmedAt       DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, provider, status])
+}
