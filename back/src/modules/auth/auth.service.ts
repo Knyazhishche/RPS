@@ -1,7 +1,7 @@
 import { PrismaClient, User } from '@prisma/client';
 import { ulid } from 'ulid';
 import { Env } from '../../config/env';
-import { verifyTelegramInitData } from './telegram-auth';
+import { TelegramUserData, verifyTelegramInitData } from './telegram-auth';
 
 export class AuthService {
   constructor(
@@ -11,25 +11,32 @@ export class AuthService {
 
   async authenticateWithTelegram(initData: string): Promise<User> {
     const parsed = verifyTelegramInitData(initData, this.env.TELEGRAM_BOT_TOKEN, this.env.TELEGRAM_AUTH_MAX_AGE_SEC);
+    return this.upsertTelegramUser(parsed.user);
+  }
 
+  async authenticateWithMockTelegram(user: TelegramUserData): Promise<User> {
+    return this.upsertTelegramUser(user);
+  }
+
+  private async upsertTelegramUser(user: TelegramUserData): Promise<User> {
     return this.prisma.user.upsert({
       where: {
-        telegramId: BigInt(parsed.user.id)
+        telegramId: BigInt(user.id)
       },
       update: {
-        username: parsed.user.username,
-        firstName: parsed.user.first_name,
-        lastName: parsed.user.last_name,
-        photoUrl: parsed.user.photo_url,
-        languageCode: parsed.user.language_code
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        photoUrl: user.photo_url,
+        languageCode: user.language_code
       },
       create: {
-        telegramId: BigInt(parsed.user.id),
-        username: parsed.user.username,
-        firstName: parsed.user.first_name,
-        lastName: parsed.user.last_name,
-        photoUrl: parsed.user.photo_url,
-        languageCode: parsed.user.language_code,
+        telegramId: BigInt(user.id),
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        photoUrl: user.photo_url,
+        languageCode: user.language_code,
         balances: {
           createMany: {
             data: [

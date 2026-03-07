@@ -39,6 +39,9 @@ services:
     command: sh -c "npm run prisma:deploy && node dist/main.js"
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql://rps:rps@postgres:5432/rps
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     ports:
       - "3000:3000"
     depends_on:
@@ -56,6 +59,9 @@ services:
     command: node dist/worker.js
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql://rps:rps@postgres:5432/rps
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     depends_on:
       postgres:
         condition: service_healthy

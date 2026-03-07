@@ -23,7 +23,7 @@ import { LobbyService } from './modules/lobby/lobby.service';
 
 export async function buildApp() {
   const app = Fastify({
-    logger: createLogger('api')
+    loggerInstance: createLogger('api')
   });
 
   const prisma = createPrismaClient();
